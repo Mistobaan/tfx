@@ -21,10 +21,10 @@ from __future__ import print_function
 import copy
 import json
 import os
-# Standard Imports
+import unittest
+
 import mock
 import tensorflow as tf
-
 from tfx.components.testdata.module_file import trainer_module
 from tfx.components.trainer import constants
 from tfx.components.trainer import executor
@@ -33,7 +33,13 @@ from tfx.types import artifact_utils
 from tfx.types import standard_artifacts
 from tfx.utils import io_utils
 from tfx.utils import path_utils
+import tfx_bsl
 from google.protobuf import json_format
+
+
+# TODO(b/): clean up once tfx-bsl post-0.22 is released.
+_TFXIO_SUPPORT_MULTIPLE_FILE_PATTERNS = getattr(
+    tfx_bsl, 'TFXIO_SUPPORT_MULTIPLE_FILE_PATTERNS', False)
 
 
 class ExecutorTest(tf.test.TestCase):
@@ -187,6 +193,8 @@ class ExecutorTest(tf.test.TestCase):
     self._verify_model_exports()
     self._verify_model_run_exports()
 
+  @unittest.skipIf(not _TFXIO_SUPPORT_MULTIPLE_FILE_PATTERNS,
+                   'TFXIO does not support multiple file patterns.')
   def testMultipleArtifacts(self):
     self._input_dict[constants.EXAMPLES_KEY] = self._multiple_artifacts
     self._exec_properties['module_file'] = self._module_file

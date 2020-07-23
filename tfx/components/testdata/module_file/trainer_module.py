@@ -30,11 +30,12 @@ import tensorflow as tf
 import tensorflow_model_analysis as tfma
 import tensorflow_transform as tft
 from tensorflow_transform.tf_metadata import schema_utils
-
-from tensorflow_metadata.proto.v0 import schema_pb2
 from tfx.components.trainer import executor
 from tfx.utils import io_utils
 from tfx.utils import path_utils
+from tfx_bsl.tfxio import dataset_options
+
+from tensorflow_metadata.proto.v0 import schema_pb2
 
 # Categorical features are assumed to each have a maximum value in the dataset.
 _MAX_CATEGORICAL_FEATURE_VALUES = [24, 31, 12]
@@ -202,11 +203,12 @@ def _eval_input_receiver_fn(tf_transform_output, schema):
       labels=transformed_features[_transformed_name(_LABEL_KEY)])
 
 
-def _input_fn(filenames, tf_transform_output, batch_size=200):
+def _input_fn(filenames, data_accessor, tf_transform_output, batch_size=200):
   """Generates features and labels for training or evaluation.
 
   Args:
     filenames: [str] list of CSV files to read data from.
+    data_accessor: fn_args_utils.DataAccessor.
     tf_transform_output: A TFTransformOutput.
     batch_size: int First dimension size of the Tensors returned by input_fn
 
@@ -214,18 +216,15 @@ def _input_fn(filenames, tf_transform_output, batch_size=200):
     A (features, indices) tuple where features is a dictionary of
       Tensors, and indices is a single Tensor of label indices.
   """
-  transformed_feature_spec = (
-      tf_transform_output.transformed_feature_spec().copy())
+  dataset = data_accessor.tf_dataset_factory(
+      filenames,
+      dataset_options.TensorflowDatasetOptions(
+          batch_size=batch_size,
+          label_key=_transformed_name(_LABEL_KEY)),
+      tf_transform_output.transformed_metadata.schema)
 
-  dataset = tf.data.experimental.make_batched_features_dataset(
-      filenames, batch_size, transformed_feature_spec, reader=_gzip_reader_fn)
-
-  transformed_features = tf.compat.v1.data.make_one_shot_iterator(
+  return tf.compat.v1.data.make_one_shot_iterator(
       dataset).get_next()
-  # We pop the label because we do not want to use it as a feature while we're
-  # training.
-  return transformed_features, transformed_features.pop(
-      _transformed_name(_LABEL_KEY))
 
 
 # TFX will call this function
@@ -261,11 +260,13 @@ def trainer_fn(trainer_fn_args, schema):
 
   train_input_fn = lambda: _input_fn(  # pylint: disable=g-long-lambda
       trainer_fn_args.train_files,
+      trainer_fn_args.data_accessor,
       tf_transform_output,
       batch_size=train_batch_size)
 
   eval_input_fn = lambda: _input_fn(  # pylint: disable=g-long-lambda
       trainer_fn_args.eval_files,
+      trainer_fn_args.data_accessor,
       tf_transform_output,
       batch_size=eval_batch_size)
 
