@@ -256,7 +256,7 @@ class _Executor(base_executor.BaseExecutor):
 
     tuner = self._search(input_dict, exec_properties)
 
-    if not self._is_chief:
+    if self._is_distributed and not self._is_chief:
       logging.info('Returning since this is not chief worker.')
       return
 
